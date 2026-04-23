@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xeroid Time Miner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;800&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,1,0" />
+    <style>
+        body { 
+            font-family: 'Poppins', sans-serif; 
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); 
+            color: white; min-height: 100vh;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 28px;
+        }
+        .active-mode { background: rgba(37, 99, 235, 0.6) !important; border-color: #60a5fa !important; }
+        
+        /* Modal Style for Offline Earnings */
+        #offline-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .reward-popup {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-weight: 800; font-size: 1.5rem; pointer-events: none;
+            animation: float-up 1.2s ease-out forwards; z-index: 100;
+        }
+        @keyframes float-up { 0% { transform: translate(-50%, 0); opacity: 1; } 100% { transform: translate(-50%, -80px); opacity: 0; } }
+    </style>
+</head>
+<body class="p-4 pb-20">
+
+    <div id="offline-modal">
+        <div class="glass p-8 max-w-sm w-full text-center border-emerald-500/30">
+            <span class="material-symbols-outlined text-emerald-400 text-5xl mb-4">history_toggle_off</span>
+            <h2 class="text-xl font-black mb-2">Offline Profits</h2>
+            <p class="text-xs text-slate-400 mb-6 uppercase tracking-widest">You were away for <span id="away-time" class="text-white">0s</span></p>
+            <div class="bg-emerald-500/10 py-4 rounded-2xl border border-emerald-500/20 mb-6">
+                <p class="text-[10px] font-bold text-emerald-400 uppercase">Gained</p>
+                <p class="text-2xl font-black text-white" id="away-coins">0.00</p>
+            </div>
+            <button onclick="closeModal()" class="w-full bg-emerald-600 py-3 rounded-xl font-bold uppercase tracking-widest active:scale-95 transition-all">Collect Coins</button>
+        </div>
+    </div>
+
+    <header class="max-w-md mx-auto mb-6 sticky top-0 z-50 py-2">
+        <div class="glass p-4 grid grid-cols-2 gap-4 shadow-2xl">
+            <div class="text-center">
+                <p class="text-[9px] font-black text-blue-400 uppercase tracking-widest">Balance</p>
+                <h2 id="coins" class="text-xl font-black">0.00</h2>
+            </div>
+            <div class="text-center">
+                <p class="text-[9px] font-black text-emerald-400 uppercase tracking-widest">Net Worth</p>
+                <h2 id="networth" class="text-xl font-black">0.00</h2>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-md mx-auto space-y-6">
+        
+        <section class="glass p-4 flex items-center justify-between border-blue-500/20">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-blue-400">inventory_2</span>
+                <p class="text-[10px] font-bold uppercase tracking-widest">Portfolio</p>
+            </div>
+            <p id="asset-count" class="text-lg font-black text-blue-400">0 / 5</p>
+        </section>
+
+        <div class="glass p-8 text-center relative h-32 flex flex-col items-center justify-center">
+            <p class="text-[10px] font-bold text-slate-500 uppercase">Empire Rate</p>
+            <p class="text-lg font-black"><span id="rate">1.0</span> <span class="text-blue-400 text-xs">c/s</span></p>
+        </div>
+
+        <section id="shop-list" class="space-y-3"></section>
+
+        <section id="stake-area" class="glass p-6 relative">
+            <h3 class="text-xs font-black uppercase mb-4 text-center tracking-widest text-blue-400">Empire Gamble</h3>
+            <div class="flex justify-center items-center h-16 bg-black/30 rounded-3xl mb-6 text-3xl font-black" id="draw-number">?</div>
+            <div class="grid grid-cols-2 gap-3 mb-4">
+                <input id="stake-amt" type="number" placeholder="Amt" class="bg-white/5 p-3 rounded-2xl outline-none text-sm border border-white/5">
+                <input id="stake-val" type="number" placeholder="1-10" class="bg-white/5 p-3 rounded-2xl outline-none text-sm border border-white/5">
+            </div>
+            <div class="grid grid-cols-2 gap-3 mb-6">
+                <button id="mode-minor" onclick="setMode('minor')" class="glass p-3 text-[10px] font-bold uppercase">Minor (<=)</button>
+                <button id="mode-greater" onclick="setMode('greater')" class="glass p-3 text-[10px] font-bold uppercase">Greater (>=)</button>
+            </div>
+            <button onclick="executeStake()" class="w-full bg-blue-600 py-4 rounded-2xl font-black text-xs uppercase transition-all active:scale-95">Stake Coins</button>
+        </section>
+
+        <button onclick="resetGame()" class="w-full text-[10px] font-bold text-red-400/30 uppercase tracking-widest pt-4">Reset Empire</button>
+    </main>
+
+    <script>
+        const INITIAL_PROPERTIES = {
+            car: { name: 'Sports Car', baseCost: 100, currentCost: 100, boost: 3, level: 0, icon: 'directions_car' },
+            house: { name: 'Suburban House', baseCost: 500, currentCost: 500, boost: 12, level: 0, icon: 'home' },
+            jet: { name: 'Private Jet', baseCost: 2500, currentCost: 2500, boost: 45, level: 0, icon: 'flight' },
+            mansion: { name: 'Estate Mansion', baseCost: 12000, currentCost: 12000, boost: 150, level: 0, icon: 'villa' },
+            island: { name: 'Private Island',
+           baseCost: 100000, baseCost: 100000, boost: 800, level: 0, icon: 'island' }
+        };
+
+        let state = JSON.parse(localStorage.getItem('xeroid_tycoon_v4')) || {
+            coins: 0,
+            baseRate: 1.0,
+            totalInvested: 0,
+            stakeMode: 'minor',
+            lastUpdate: Date.now(),
+            inventory: JSON.parse(JSON.stringify(INITIAL_PROPERTIES))
+        };
+
+        function save() { 
+            state.lastUpdate = Date.now();
+            localStorage.setItem('xeroid_tycoon_v4', JSON.stringify(state)); 
+        }
+
+        // --- BACKGROUND CALCULATOR ---
+        function checkOfflineEarnings() {
+            const now = Date.now();
+            const diffMs = now - state.lastUpdate;
+            const diffSec = Math.floor(diffMs / 1000);
+
+            if (diffSec > 5) { // Only show if away for more than 5 seconds
+                let currentRate = state.baseRate;
+                for(let key in state.inventory) { currentRate += (state.inventory[key].level * state.inventory[key].boost); }
+                
+                const earned = diffSec * currentRate;
+                state.coins += earned;
+                
+                // Format Time
+                const h = Math.floor(diffSec / 3600);
+                const m = Math.floor((diffSec % 3600) / 60);
+                const s = diffSec % 60;
+                
+                document.getElementById('away-time').innerText = `${h}h ${m}m ${s}s`;
+                document.getElementById('away-coins').innerText = earned.toFixed(2);
+                document.getElementById('offline-modal').style.display = 'flex';
+                save();
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('offline-modal').style.display = 'none';
+        }
+
+        function resetGame() { if(confirm("Start again?")) { localStorage.removeItem('xeroid_tycoon_v4'); location.reload(); } }
+
+        setInterval(() => {
+            let currentRate = state.baseRate;
+            for(let key in state.inventory) { currentRate += (state.inventory[key].level * state.inventory[key].boost); }
+            state.coins += (currentRate / 10);
+            updateUI(currentRate);
+            save();
+        }, 100);
+
+        function renderShop() {
+            const list = document.getElementById('shop-list');
+            let owned = 0;
+            list.innerHTML = '';
+            for(let key in state.inventory) {
+                const item = state.inventory[key];
+                if(item.level > 0) owned++;
+                list.innerHTML += `
+                <div class="glass p-4 flex items-center justify-between border-white/5">
+                    <div class="flex items-center gap-3">
+                        <div class="p-2 bg-blue-500/10 rounded-xl text-blue-400"><span class="material-symbols-outlined">${item.icon}</span></div>
+                        <div><p class="text-xs font-bold">${item.name}</p><p class="text-[9px] text-slate-500 font-bold uppercase">Lvl ${item.level} (+$${item.boost}/s)</p></div>
+                    </div>
+                    <button onclick="handleAction('${key}')" class="bg-blue-600/20 hover:bg-blue-600/40 px-4 py-2 rounded-xl text-[10px] font-black transition-all border border-blue-500/30 min-w-[100px]">
+                        ${item.level > 0 ? 'UPGRADE' : 'BUY'} $${item.currentCost}
+                    </button>
+                </div>`;
+            }
+            document.getElementById('asset-count').innerText = `${owned} / 5`;
+        }
+
+        function handleAction(key) {
+            const item = state.inventory[key];
+            if(state.coins >= item.currentCost) {
+                state.coins -= item.currentCost;
+                state.totalInvested += item.currentCost;
+                item.level++;
+                item.currentCost = item.level === 1 ? Math.ceil(item.baseCost * 0.10) : Math.ceil(item.currentCost * 1.8);
+                renderShop(); updateUI(); save();
+            }
+        }
+
+        function executeStake() {
+            const amt = parseFloat(document.getElementById('stake-amt').value);
+            const valInput = document.getElementById('stake-val').value;
+            const val = parseInt(valInput);
+            if (valInput.includes('.') || isNaN(val) || val < 1 || val > 10 || isNaN(amt) || amt > state.coins || amt <= 0) return;
+            state.coins -= amt;
+            updateUI();
+            let drawEl = document.getElementById('draw-number');
+            let anim = setInterval(() => { drawEl.innerText = Math.floor(Math.random() * 10) + 1; }, 100);
+            setTimeout(() => {
+                clearInterval(anim);
+                const res = Math.floor(Math.random() * 10) + 1;
+                drawEl.innerText = res;
+                let win = ((state.stakeMode === 'minor' && res <= val) || (state.stakeMode === 'greater' && res >= val)) && (Math.random() < 0.15);
+                if (win) { state.coins += (amt * 2); showPopup(amt * 2, true); drawEl.style.color = "#10b981"; }
+                else { showPopup(amt, false); drawEl.style.color = "#ef4444"; }
+                setTimeout(() => { drawEl.style.color = "white"; drawEl.innerText = "?"; }, 2000);
+                updateUI();
+            }, 3000);
+        }
+
+        function showPopup(amount, isWin) {
+            const popup = document.createElement('div');
+            popup.className = `reward-popup ${isWin ? 'text-emerald-400' : 'text-red-500'}`;
+            popup.innerText = isWin ? `+${amount.toFixed(2)}` : `-${amount.toFixed(2)}`;
+            document.getElementById('stake-area').appendChild(popup);
+            setTimeout(() => popup.remove(), 1200);
+        }
+
+        function setMode(mode) {
+            state.stakeMode = mode;
+            document.getElementById('mode-minor').classList.toggle('active-mode', mode === 'minor');
+            document.getElementById('mode-greater').classList.toggle('active-mode', mode === 'greater');
+            save();
+        }
+
+        function updateUI(currentRate) {
+            document.getElementById('coins').innerText = state.coins.toFixed(2);
+            document.getElementById('networth').innerText = (state.coins + state.totalInvested).toFixed(2);
+            document.getElementById('rate').innerText = (currentRate || 1.0).toFixed(1);
+        }
+
+        // INIT
+        checkOfflineEarnings();
+        renderShop();
+        setMode(state.stakeMode);
+    </script>
+</body>
+</html>
